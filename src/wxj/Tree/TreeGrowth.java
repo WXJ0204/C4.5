@@ -13,6 +13,8 @@ import java.lang.reflect.Array;
 import java.math.BigDecimal;
 import java.nio.charset.Charset;
 import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
@@ -26,12 +28,77 @@ public class TreeGrowth {
     ClassE classE;
     ClassF classF;
     String povi;
+    Node root;
 
     public static void main(String[] args) throws IOException {
         TreeGrowth tree1 = new TreeGrowth("src/Iris.csv", "Iris-setosa");
         TreeGrowth tree2 = new TreeGrowth("src/Iris.csv", "Iris-versicolor");
         TreeGrowth tree3 = new TreeGrowth("src/Iris.csv", "Iris-virginica");
+
+        Node[] node = new Node[3];
+        node[0] = tree1.root;
+        node[1] = tree2.root;
+        node[2] = tree3.root;
+        TestTree("src/test.csv", node);
+
         System.out.println("wxj.Tree.TreeGrowth.main()");
+    }
+
+    public static void TestTree(String path, Node[] root) throws FileNotFoundException, IOException {
+        CsvReader reader = new CsvReader(path, ',', Charset.forName("UTF-8"));
+        reader.readRecord();
+        String[] header = reader.getValues();//第一行
+        int len = header.length;//列数
+        ArrayList<String> result = new ArrayList<>();//记录结果
+        ArrayList<String> testData = new ArrayList<>();//记录原数据
+        int line = 0;//记录结果的行数
+        int correct = 0;//正确的测试结果
+
+        //f_num记录 属性-序号 的键值对
+        Map<String, Integer> f_num = new HashMap<>();
+        for (int i = 0; i < header.length - 1; i++) {
+            f_num.put(header[i], i);
+        }
+
+        while (reader.readRecord()) {
+            testData.add(reader.getValues()[len-1]);//记录结果
+            //为数值型：
+            float[] cmp = new float[header.length - 1];//cmp[i]记录第i项属性的值
+            for (int i = 0; i < header.length - 1; i++) {
+                cmp[i] = Float.parseFloat(reader.getValues()[i]);
+            }
+            Node node = new Node();//节点指针
+
+            for (int m = 0; m < root.length; m++) {//这个循环是将测试项逐个放入决策树中进行测试，直到分类到某个属性
+                node = root[m];
+                while (null == node.lable) {
+                    int fNum = f_num.get(node.test_cond[0]);
+                    float value = Float.parseFloat(node.test_cond[2]);
+                    if (cmp[fNum] <= value) {
+                        node = node.Child.get(0);
+                    } else {
+                        node = node.Child.get(1);
+                    }
+                }
+                if (!"other".equals(node.lable)) {//成功被分类，跳出循环
+                    break;
+                }
+            }
+            if ("other".equals(node.lable)) {//三次后还没有被分类，则只能赋出现最多的属性给它
+                node.lable = "Iris-versicolor";
+            }
+            result.add(node.lable);//存放结果
+            System.out.println("实际分类："+  reader.getValues()[len-1]  +"  "  +  "决策树输出的结果："+ node.lable);
+            line++;
+        }
+        
+        //比较准确率
+        for(int i = 0;i<line;i++){
+            if(result.get(i).equals(testData.get(i)))
+                correct++;
+        }
+        System.out.println("准确率："+(double)correct/(double)line);
+
     }
 
     public TreeGrowth(String path, String povi) throws FileNotFoundException, IOException {
@@ -60,7 +127,7 @@ public class TreeGrowth {
 
         }
 
-        Node root = StartBuiltTree(classE, classF);
+        this.root = StartBuiltTree(classE, classF);
         System.out.println("wxj.Tree.TreeGrowth.<init>()");
     }
 
@@ -72,40 +139,39 @@ public class TreeGrowth {
         } else {
             Node root = new Node();
             root.test_cond = find_best_split(E, F);
-            
-            
+
             //分裂E
             //先按最大增益属性来排序
             int valueF = -1;
-            for(int i = 0;i<F.line.size();i++){
-                if(F.line.get(i).equals(root.test_cond[0]))
+            for (int i = 0; i < F.line.size(); i++) {
+                if (F.line.get(i).equals(root.test_cond[0])) {
                     valueF = i;
+                }
             }
-            //System.out.println(valueF);
+            System.out.println(valueF);
             eSort(E, valueF);
-            
-        ClassE eleft = null;//复制对象
-        try {
-            eleft = (ClassE) E.clone();
-            eleft.E = spiltArrayList(E.E, 0, Integer.parseInt(root.test_cond[1]));//ArrayList也要复制...
-        } catch (CloneNotSupportedException ex) {
-            Logger.getLogger(TreeGrowth.class.getName()).log(Level.SEVERE, null, ex);
-        }        
-        for(int i =0;i<Integer.parseInt(root.test_cond[1]);i++){
-            E.E.remove(0);
+
+            ClassE eleft = null;//复制对象
+            try {
+                eleft = (ClassE) E.clone();
+                eleft.E = spiltArrayList(E.E, 0, Integer.parseInt(root.test_cond[1]));//ArrayList也要复制...
+            } catch (CloneNotSupportedException ex) {
+                Logger.getLogger(TreeGrowth.class.getName()).log(Level.SEVERE, null, ex);
+            }
+            for (int i = 0; i < Integer.parseInt(root.test_cond[1]); i++) {
+                E.E.remove(0);
+            }
+            root.Child = new ArrayList<>();
+
+            //小于test_cond[3]的分到左孩子
+            Node childleft = StartBuiltTree(eleft, F);
+            root.Child.add(childleft);
+
+            //大于test_cond[3]的分到右孩子
+            Node childright = StartBuiltTree(E, F);
+            root.Child.add(childright);
+            return root;
         }
-        root.Child = new ArrayList<>();
-        
-        //小于test_cond[3]的分到左孩子
-        Node childleft = StartBuiltTree(eleft,  F);
-        root.Child.add(childleft);
-        
-        //大于test_cond[3]的分到右孩子
-        Node childright = StartBuiltTree(E, F);
-        root.Child.add(childright);
-        return root;
-        }
-        
 
     }
 
@@ -129,27 +195,31 @@ public class TreeGrowth {
         float[] value = new float[F.line.size()];
         int[] pos = new int[F.line.size()];
         String[] posValue = new String[F.line.size()];
-        
+
         for (int i = 0; i < F.line.size(); i++) {
             //先排序,按第i个属性排序
             eSort(e, i);
             float maxGainRatio = -1000;
-           // System.out.println("wxj.Tree.TreeGrowth.find_best_split()");
+            // System.out.println("wxj.Tree.TreeGrowth.find_best_split()");
             for (int point = 1; point < e.E.size(); point++) {
                 //计算分子： (infoD-infoA)/
                 float a = infoD - InfoA(e, point);
+                //System.out.println(InfoA(e, point));
                 //计算分母： 
-                float b = SplitInfoA(e,point);
+                float b = SplitInfoA(e, point);
+                //System.out.println(b);
                 //计算增益率
-                float gain_ratio = a/b;
-                if(gain_ratio>maxGainRatio){
+                float gain_ratio = a / b;
+                //float gain_ratio = a;
+                //System.out.println(gain_ratio);
+                if (gain_ratio > maxGainRatio) {
                     maxGainRatio = gain_ratio;
-                    pos[i]=point;
-                    posValue[i]=e.E.get(point).get(i);
+                    pos[i] = point;
+                    posValue[i] = e.E.get(point).get(i);
                 }
                 //System.out.println(gain_ratio);
             }
-            System.out.println(maxGainRatio);
+            //System.out.println(maxGainRatio+":"+pos[i]);
             value[i] = maxGainRatio;
             //System.out.println("wxj.Tree.TreeGrowth.find_best_split()");
 
@@ -157,16 +227,17 @@ public class TreeGrowth {
         //返回最大增益率的值
         float max = value[0];
         int num = 0;
-        for(int i = 1;i<F.line.size();i++){
-        if(max<value[i])
-            max = value[i];
-        num = i;
-    }
+        for (int i = 1; i < F.line.size(); i++) {
+            if (max < value[i]) {
+                max = value[i];
+                num = i;
+            }
+        }
         res[0] = F.line.get(num);
         res[1] = new Integer(pos[num]).toString();
-       res[2] = posValue[num];
+        res[2] = posValue[num];
         return res;
-        
+
 //     int k = 0;
 //     float[] value = new float[E.E.size()];
 //     //String[] key = new String[E.E.size()];
@@ -174,7 +245,6 @@ public class TreeGrowth {
 //         value[i] = Float.parseFloat(E.E.get(i).get(k));
 //         key[i] = new String(E.E.get(i).get(E.E.get(i).size()-1));
 //     }
-       
     }
 
     private ArrayList<ArrayList<String>> spiltArrayList(ArrayList<ArrayList<String>> list, int i, int j) {
@@ -230,7 +300,7 @@ public class TreeGrowth {
 
     }
 
-    private float SplitInfoA(ClassE e, int point){
+    private float SplitInfoA(ClassE e, int point) {
         int leftProv = 0;
         int rightProv = 0;
         double info;
@@ -245,22 +315,13 @@ public class TreeGrowth {
 
         if (leftProv != 0 && rightProv != 0) {
             info = -(log(((double) leftProv / (double) point)) / log(2)) - (log((double) rightProv / (double) (e.E.size() - point)) / log(2));
-        } else if (leftProv == 0 && rightProv == 0) {
-            info = 0;
-        } else if (leftProv == 0) {
-            info = -(log( ((double)rightProv / (double)(e.E.size() - point))) / log(2));
         } else {
-            info = -(log( ((double)leftProv / (double)point)) / log(2));
-        }
-
-        if(info==0){
-            System.out.println("wxj.Tree.TreeGrowth.SplitInfoA()");
+            info = 1000;
         }
 
         return new BigDecimal(info).floatValue();
     }
-    
-    
+
     private float InfoA(ClassE e, int point) {//point:1~size()
         int leftProv = 0;
         int rightProv = 0;
@@ -279,12 +340,10 @@ public class TreeGrowth {
         } else if (leftProv == 0 && rightProv == 0) {
             info = 0;
         } else if (leftProv == 0) {
-            info = -(((double)rightProv / (double)(e.E.size() - point))) * (log(((double)rightProv / (double)(e.E.size() - point))) / log(2));
+            info = -(((double) rightProv / (double) (e.E.size() - point))) * (log(((double) rightProv / (double) (e.E.size() - point))) / log(2));
         } else {
-            info = -( ((double)leftProv / (double)point)) * (log( ((double)leftProv / (double)point)) / log(2));
+            info = -(((double) leftProv / (double) point)) * (log(((double) leftProv / (double) point)) / log(2));
         }
-
-
 
         return new BigDecimal(info).floatValue();
     }
@@ -303,16 +362,16 @@ public class TreeGrowth {
         double p1 = (double) count[0];
         double p2 = (double) count[1];
         double info;
-        if(p1!=0&&p2!=0)
-        info = -(p1 / len) * (log(p1 / len) / log(2)) - (p2 / len) * (log(p2 / len) / log(2));
-        else if(p1==0)
-            info = - (p2 / len) * (log(p2 / len) / log(2));
-        else if(p2==0)
+        if (p1 != 0 && p2 != 0) {
+            info = -(p1 / len) * (log(p1 / len) / log(2)) - (p2 / len) * (log(p2 / len) / log(2));
+        } else if (p1 == 0) {
+            info = -(p2 / len) * (log(p2 / len) / log(2));
+        } else if (p2 == 0) {
             info = -(p1 / len) * (log(p1 / len) / log(2));
-        else 
+        } else {
             info = 0;
-        
-        
+        }
+
         return new BigDecimal(info).floatValue();
     }
 
@@ -333,8 +392,6 @@ public class TreeGrowth {
 
     private boolean stopping_cond(ClassE classE, ClassF classF) {
 
-        
-        
         int len = classE.E.get(0).size();
         int count = 0;
         for (int i = 0; i < classE.E.size(); i++) {
@@ -342,7 +399,7 @@ public class TreeGrowth {
                 count++;
             }
         }
-        if (count == classE.E.size()||count <=1) {
+        if (count == classE.E.size() || count <= 1) {
             return true;
         } else {
             return false;
