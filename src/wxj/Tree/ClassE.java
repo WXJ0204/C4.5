@@ -8,8 +8,9 @@ package wxj.Tree;
 import java.util.ArrayList;
 
 /**
- *
- * @author Administrator
+ *训练集
+ * 二维字符串数组，行为一个数据项，列为属性值
+ * @author WXJ
  */
 public class ClassE implements Cloneable{
     ArrayList<ArrayList<String>> E;

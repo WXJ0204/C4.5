@@ -8,8 +8,9 @@ package wxj.Tree;
 import java.util.ArrayList;
 
 /**
- *
- * @author Administrator
+ *属性集
+ * 一个字符串数组即可
+ * @author WXJ
  */
 public class ClassF {
 

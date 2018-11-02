@@ -9,7 +9,6 @@ import com.csvreader.CsvReader;
 import java.io.FileNotFoundException;
 import java.io.IOException;
 import static java.lang.Math.log;
-import java.lang.reflect.Array;
 import java.math.BigDecimal;
 import java.nio.charset.Charset;
 import java.util.ArrayList;
@@ -19,18 +18,19 @@ import java.util.logging.Level;
 import java.util.logging.Logger;
 
 /**
- *
- * @author Administrator
+ *基于C4.5的决策树（目前只支持数值型）
+ * @author WXJ
  */
 public class TreeGrowth {
 
-    String path;
-    ClassE classE;
-    ClassF classF;
-    String povi;
-    Node root;
+    String path;//测试集的文件路径
+    ClassE classE;//测试集
+    ClassF classF;//属性集
+    String povi;//正例
+    Node root;//决策树的根
 
     public static void main(String[] args) throws IOException {
+        //因为有三种三类，故建立三棵决策树，每一棵以一个属性为正例，其余属性为负例
         TreeGrowth tree1 = new TreeGrowth("src/Iris.csv", "Iris-setosa");
         TreeGrowth tree2 = new TreeGrowth("src/Iris.csv", "Iris-versicolor");
         TreeGrowth tree3 = new TreeGrowth("src/Iris.csv", "Iris-virginica");
@@ -40,8 +40,7 @@ public class TreeGrowth {
         node[1] = tree2.root;
         node[2] = tree3.root;
         TestTree("src/test.csv", node);
-
-        System.out.println("wxj.Tree.TreeGrowth.main()");
+       
     }
 
     public static void TestTree(String path, Node[] root) throws FileNotFoundException, IOException {
@@ -106,6 +105,7 @@ public class TreeGrowth {
         this.povi = povi;
         this.classE = new ClassE(new ArrayList<>());
 
+        //读取文件并生成测试集和属性集
         CsvReader reader = new CsvReader(path, ',', Charset.forName("UTF-8"));
         reader.readRecord();
         String[] header = reader.getValues();//第一行
@@ -126,9 +126,9 @@ public class TreeGrowth {
             this.classE.E.add(line);
 
         }
-
+        
+        //使用训练集E和属性集F建立树      
         this.root = StartBuiltTree(classE, classF);
-        System.out.println("wxj.Tree.TreeGrowth.<init>()");
     }
 
     public Node StartBuiltTree(ClassE E, ClassF F) {
@@ -141,16 +141,17 @@ public class TreeGrowth {
             root.test_cond = find_best_split(E, F);
 
             //分裂E
-            //先按最大增益属性来排序
+            //找到最大增益属性
             int valueF = -1;
             for (int i = 0; i < F.line.size(); i++) {
                 if (F.line.get(i).equals(root.test_cond[0])) {
                     valueF = i;
                 }
             }
-            System.out.println(valueF);
+            //将E按最大增益属性来排序
             eSort(E, valueF);
 
+            //以最大增益属性的最佳分裂点为界，将E的一部分复制到eleft中，再删掉这些部分，就使E分裂成了两个子集
             ClassE eleft = null;//复制对象
             try {
                 eleft = (ClassE) E.clone();
@@ -163,11 +164,11 @@ public class TreeGrowth {
             }
             root.Child = new ArrayList<>();
 
-            //小于test_cond[3]的分到左孩子
+            //小于分裂点值的训练集分到左孩子
             Node childleft = StartBuiltTree(eleft, F);
             root.Child.add(childleft);
 
-            //大于test_cond[3]的分到右孩子
+            //大于分裂点值的训练集分到右孩子
             Node childright = StartBuiltTree(E, F);
             root.Child.add(childright);
             return root;
@@ -175,6 +176,7 @@ public class TreeGrowth {
 
     }
 
+    //从训练集E和属性F中，找到信息增益率最大的属性，因为是数值属性，还要给出分裂点
     private String[] find_best_split(ClassE E, ClassF F) {
         ClassE e = null;//复制对象，以免排序给排乱了
         try {
@@ -184,44 +186,40 @@ public class TreeGrowth {
             Logger.getLogger(TreeGrowth.class.getName()).log(Level.SEVERE, null, ex);
         }
         String res[] = new String[3];//记录返回的属性名和分裂点
+        
         //计算InfoD
         String[] key = new String[E.E.size()];
         for (int i = 0; i < E.E.size(); i++) {
-            key[i] = new String(E.E.get(i).get(E.E.get(i).size() - 1));
+            key[i] = E.E.get(i).get(E.E.get(i).size() - 1);
         }
         float infoD = InfoD(key);
-        float info;
+        
         //计算每个属性的最佳分裂点,假设都是连续属性
-        float[] value = new float[F.line.size()];
-        int[] pos = new int[F.line.size()];
-        String[] posValue = new String[F.line.size()];
+        float[] value = new float[F.line.size()];//保存每个属性的最大信息增益率
+        int[] pos = new int[F.line.size()];//保存每个属性的最大信息增益率的分裂点
+        String[] posValue = new String[F.line.size()];//保存每个属性的最大信息增益率的分裂点的值
 
         for (int i = 0; i < F.line.size(); i++) {
             //先排序,按第i个属性排序
             eSort(e, i);
             float maxGainRatio = -1000;
-            // System.out.println("wxj.Tree.TreeGrowth.find_best_split()");
             for (int point = 1; point < e.E.size(); point++) {
-                //计算分子： (infoD-infoA)/
+                //计算分子： (infoD-infoA)，即信息熵
                 float a = infoD - InfoA(e, point);
-                //System.out.println(InfoA(e, point));
                 //计算分母： 
                 float b = SplitInfoA(e, point);
                 //System.out.println(b);
-                //计算增益率
+                //计算本次的信息增益率
                 float gain_ratio = a / b;
-                //float gain_ratio = a;
-                //System.out.println(gain_ratio);
-                if (gain_ratio > maxGainRatio) {
+
+                if (gain_ratio > maxGainRatio) {//若本次信息增益率大于原有的最大信息增益率，则取本次的值
                     maxGainRatio = gain_ratio;
                     pos[i] = point;
                     posValue[i] = e.E.get(point).get(i);
                 }
-                //System.out.println(gain_ratio);
             }
-            //System.out.println(maxGainRatio+":"+pos[i]);
-            value[i] = maxGainRatio;
-            //System.out.println("wxj.Tree.TreeGrowth.find_best_split()");
+
+            value[i] = maxGainRatio;//保存每个属性的最大信息增益率
 
         }
         //返回最大增益率的值
@@ -234,19 +232,13 @@ public class TreeGrowth {
             }
         }
         res[0] = F.line.get(num);
-        res[1] = new Integer(pos[num]).toString();
+        res[1] = Integer.toString(pos[num]);
         res[2] = posValue[num];
         return res;
 
-//     int k = 0;
-//     float[] value = new float[E.E.size()];
-//     //String[] key = new String[E.E.size()];
-//     for(int i = 0;i<E.E.size();i++){
-//         value[i] = Float.parseFloat(E.E.get(i).get(k));
-//         key[i] = new String(E.E.get(i).get(E.E.get(i).size()-1));
-//     }
     }
 
+    //从原有的ArrayList中分裂出一个新的ArrayList，分裂范围为[i,j)
     private ArrayList<ArrayList<String>> spiltArrayList(ArrayList<ArrayList<String>> list, int i, int j) {
         ArrayList<ArrayList<String>> resList = new ArrayList<>();
         for (int k = i; k < j; k++) {
@@ -260,13 +252,14 @@ public class TreeGrowth {
 
     }
 
+    //将训练集E按第i个属性排序
     private void eSort(ClassE e, int i) {
-
         quickSort(e, i, 0, e.E.size() - 1);
 
     }
-
-    static public void quickSort(ClassE e, int k, int left, int right) {
+     
+    //快速排序，仅给eSort调用
+    static private void quickSort(ClassE e, int k, int left, int right) {
         if (left >= right) {
             return;  //数据源少于两个数，就返回
         }
@@ -281,6 +274,7 @@ public class TreeGrowth {
         quickSort(e, k, i + 1, right);
     }
 
+    //交换训练集e中i和j项属性
     static private void swap(ClassE e, int i, int j) {  //交换i j的位置
         ArrayList<String> temp = new ArrayList<>();
         //temp=j
@@ -300,6 +294,7 @@ public class TreeGrowth {
 
     }
 
+    //计算训练集e中，将point作为分裂点，所得新的信息需求
     private float SplitInfoA(ClassE e, int point) {
         int leftProv = 0;
         int rightProv = 0;
@@ -322,6 +317,7 @@ public class TreeGrowth {
         return new BigDecimal(info).floatValue();
     }
 
+    //计算信息增益率的分母,以point为分裂点
     private float InfoA(ClassE e, int point) {//point:1~size()
         int leftProv = 0;
         int rightProv = 0;
@@ -348,6 +344,7 @@ public class TreeGrowth {
         return new BigDecimal(info).floatValue();
     }
 
+    //计算信息熵
     private float InfoD(String[] data) {
         //计算InfoD
         int[] count = new int[2];
@@ -375,6 +372,7 @@ public class TreeGrowth {
         return new BigDecimal(info).floatValue();
     }
 
+    //返回训练集E中，个数最多的结果值，用于叶节点的投票
     private String classify(ClassE E) {
         int len = E.E.get(0).size();
         int count = 0;
@@ -383,15 +381,15 @@ public class TreeGrowth {
                 count++;
             }
         }
-        if (2 * count > E.E.size()) {
+        if (2 * count >= E.E.size()) {
             return povi;
         } else {
             return "other";
         }
     }
 
+    //决定是否终止递归树的增长
     private boolean stopping_cond(ClassE classE, ClassF classF) {
-
         int len = classE.E.get(0).size();
         int count = 0;
         for (int i = 0; i < classE.E.size(); i++) {
@@ -399,7 +397,7 @@ public class TreeGrowth {
                 count++;
             }
         }
-        if (count == classE.E.size() || count <= 1) {
+        if (count == classE.E.size() || count <= 4) {
             return true;
         } else {
             return false;
